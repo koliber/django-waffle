@@ -86,6 +86,23 @@ With jingo_, add it to the ``JINJA_CONFIG['extensions']`` list::
         # ...
     }
 
+Organization Flags
+------------------
+
+.. versionchanged:: 0.14
+
+Some application have organizations, companies, or other groupings of users which
+are convenient targets for flags. You can configure Waffle to allow such flags.
+
+If you want to use organization-based flags, make sure to add
+the `WAFFLE_ORG_MODEL` and `WAFFLE_USER_TO_ORG_FK_FIELD` settings to your settings file.
+If your users belong to `accounts.Company`, your settings should include::
+
+    WAFFLE_ORG_MODEL = 'accounts.Company'
+    WAFFLE_USER_TO_ORG_FK_FIELD = 'company'
+
+This needs to be done before the migrations are run for Waffle.
+
 
 Database Schema
 ===============

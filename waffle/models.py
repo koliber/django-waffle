@@ -12,7 +12,7 @@ from django.utils.encoding import python_2_unicode_compatible
 from django.utils.translation import ugettext_lazy as _
 
 from waffle import managers
-from waffle.utils import get_setting, keyfmt, get_cache
+from waffle.utils import get_setting, keyfmt, get_cache, uses_org_flags
 
 logger = logging.getLogger('waffle')
 
@@ -175,6 +175,13 @@ class Flag(BaseModel):
         help_text=_('Activate this flag for these user groups.'),
         verbose_name=_('Groups'),
     )
+    if uses_org_flags():
+        organizations = models.ManyToManyField(
+            get_setting('ORGANIZATION_MODEL'),
+            blank=True,
+            help_text=_('Activate this flag for these organizations.'),
+            verbose_name=_('Organizations'),
+        )
     users = models.ManyToManyField(
         settings.AUTH_USER_MODEL,
         blank=True,
@@ -217,6 +224,7 @@ class Flag(BaseModel):
             self._cache_key(self.name),
             keyfmt(get_setting('FLAG_USERS_CACHE_KEY'), self.name),
             keyfmt(get_setting('FLAG_GROUPS_CACHE_KEY'), self.name),
+            keyfmt(get_setting('FLAG_ORGANIZATIONS_CACHE_KEY'), self.name),
             get_setting('ALL_FLAGS_CACHE_KEY'),
         ]
         cache.delete_many(keys)
@@ -253,6 +261,22 @@ class Flag(BaseModel):
         cache.add(cache_key, group_ids)
         return group_ids
 
+    def _get_org_ids(self):
+        cache_key = keyfmt(get_setting('FLAG_ORGANIZATIONS_CACHE_KEY'), self.name)
+        cached = cache.get(cache_key)
+        if cached == CACHE_EMPTY:
+            return set()
+        if cached:
+            return cached
+
+        org_ids = set(self.organizations.all().values_list('pk', flat=True))
+        if not org_ids:
+            cache.add(cache_key, CACHE_EMPTY)
+            return set()
+
+        cache.add(cache_key, org_ids)
+        return org_ids
+
     def is_active_for_user(self, user):
         if self.authenticated and user.is_authenticated:
             return True
@@ -268,10 +292,20 @@ class Flag(BaseModel):
             return True
 
         if hasattr(user, 'groups'):
-            group_ids = self._get_group_ids()
-            user_groups = set(user.groups.all().values_list('pk', flat=True))
-            if group_ids.intersection(user_groups):
+            flag_group_ids = self._get_group_ids()
+            user_group_ids = set(user.groups.all().values_list('pk', flat=True))
+            if flag_group_ids.intersection(user_group_ids):
                 return True
+
+        if uses_org_flags():
+            # If user does not have an org set, no need to do further checks
+            org_fk_field_name = get_setting('USER_TO_ORGANIZATION_FK_FIELD')
+            user_org_id = getattr(user, org_fk_field_name, None)
+            if user_org_id:
+                flag_org_ids = self._get_org_ids()
+                if user_org_id in flag_org_ids:
+                    return True
+
         return None
 
     def _is_active_for_user(self, request):

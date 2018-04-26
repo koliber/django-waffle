@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.utils.translation import ugettext_lazy as _
 
 from waffle.models import Flag, Sample, Switch
+from waffle.utils import uses_org_flags
 
 
 class BaseAdmin(admin.ModelAdmin):
@@ -46,7 +47,12 @@ class FlagAdmin(BaseAdmin):
     list_display = ('name', 'note', 'everyone', 'percent', 'superusers',
                     'staff', 'authenticated', 'languages')
     list_filter = ('everyone', 'superusers', 'staff', 'authenticated')
-    raw_id_fields = ('users', 'groups')
+
+    if uses_org_flags():
+        raw_id_fields = ('users', 'groups', 'organizations')
+    else:
+        raw_id_fields = ('users', 'groups')
+
     ordering = ('-id',)
 
 
